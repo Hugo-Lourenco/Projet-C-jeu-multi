@@ -1,35 +1,90 @@
+#include <windows.h>
 #include <stdio.h>
 #include <stdbool.h>
-// Inclusion de la bibliothèque DGI (le chemin exact dépend de votre école)
-#include <dgi.h> 
 
 #include "player.h"
-#include "map.h"
-#include "network.h"
 
-int main() {
-    // 1. Initialisation de la fenêtre graphique avec DGI
-    // Note : Les noms des fonctions (InitWindow, UpdateDisplay...) peuvent 
-    // légèrement varier selon la version exacte de DGI fournie par votre école.
-    if (!dgi_init(800, 600, "CS:GO - Free For All")) {
-        printf("Erreur lors de l'initialisation de DGI.\n");
-        return 1;
+// Variable globale pour savoir si le jeu tourne
+bool running = true;
+
+// Fonction de gestion des messages de la fenêtre Windows
+LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    switch (uMsg) {
+        case WM_CLOSE:
+        case WM_DESTROY:
+            running = false;
+            PostQuitMessage(0);
+            return 0;
+            
+        case WM_KEYDOWN:
+            if (wParam == VK_ESCAPE) {
+                running = false;
+            }
+            // Exemple : Appuyer sur ESPACE pour tirer
+            if (wParam == VK_SPACE) {
+                printf("Pan !\n");
+            }
+            return 0;
     }
+    return DefWindowProc(hwnd, uMsg, wParam, lParam);
+}
 
-    // 2. Initialisation du joueur (depuis player.h)
+int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
+    
+    // 1. Initialiser le joueur
     Player p1;
-    init_player(&p1, 1, 2.0f, 3.0f);
-    printf("Joueur %d pret avec %d PV !\n", p1.id, p1.hp);
+    init_player(&p1, 1, 100.0f, 100.0f); // Position en pixels pour l'instant
 
-    bool running = true;
+    // 2. Création de la fenêtre Windows
+    const char CLASS_NAME[] = "CSGO_Class";
+    WNDCLASS wc = {0};
+    wc.lpfnWndProc   = WindowProc;
+    wc.hInstance     = hInstance;
+    wc.lpszClassName = CLASS_NAME;
+    wc.hbrBackground = (HBRUSH)(COLOR_WINDOW+1);
+
+    RegisterClass(&wc);
+
+    HWND hwnd = CreateWindowEx(
+        0, CLASS_NAME, "CS:GO - Free For All (GDI)",
+        WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, 800, 600,
+        NULL, NULL, hInstance, NULL
+    );
+
+    if (hwnd == NULL) return 0;
+    ShowWindow(hwnd, nCmdShow);
 
     // 3. Boucle de jeu principale
+    MSG msg = {0};
     while (running) {
+        // A. Gestion des événements Windows (Clavier, Fermeture)
+        while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
+        }
+
+        // B. Logique du jeu et Réseau 
+        // ... (Mise à jour des positions, etc.) ...
+
+        // C. Rendu graphique avec GDI
+        HDC hdc = GetDC(hwnd);
         
-        // A. Gestion des événements clavier/souris
-        // dgi_update_events() met à jour l'état des touches
-        dgi_update_events(); 
+        // --- Effacer l'écran ---
+        RECT rect;
+        GetClientRect(hwnd, &rect);
+        FillRect(hdc, &rect, (HBRUSH) (COLOR_WINDOW+1));
+
+        // --- Dessiner le joueur (un simple carré rouge pour commencer) ---
+        HBRUSH redBrush = CreateSolidBrush(RGB(255, 0, 0));
+        RECT playerRect = { (int)p1.x, (int)p1.y, (int)p1.x + 50, (int)p1.y + 50 };
+        FillRect(hdc, &playerRect, redBrush);
+        DeleteObject(redBrush);
+
+        ReleaseDC(hwnd, hdc);
         
-        // Exemple (à adapter selon les fonctions DGI) : 
-        if (dgi_is_key_pressed(KEY_ESCAPE)) {
-            running
+        // Petite pause pour ne pas surcharger le processeur (simule environ 60 FPS)
+        Sleep(16); 
+    }
+
+    return 0;
+}

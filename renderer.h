@@ -10,6 +10,8 @@
 
 // Initialisation des textures (À appeler une seule fois)
 void init_textures();
+void init_weapon_asset();
+void cleanup_weapon_asset();
 
 void draw_3d_view(HWND hwnd, HDC hdc, Player p);
 

@@ -16,45 +16,32 @@ bool window_focused = true;
 
 Player Packets_players[5]; 
 
-// --- FONCTION MAGIQUE DE DÉTECTION DE HIT ---
 bool check_if_hit(PlayerPacket shooter, Player target) {
-    // Calcul de la distance entre le tireur et nous
     float dx = target.x - shooter.x;
     float dy = target.y - shooter.y;
     float dist = sqrtf(dx * dx + dy * dy);
 
-    // Si la cible est trop loin, la balle est perdue
     if (dist > 16.0f) return false;
 
-    // Angle absolu entre le tireur et nous
     float angle_to_target = atan2f(dy, dx);
-    
-    // Écart entre le regard du tireur et notre position
     float diff = angle_to_target - shooter.angle;
     
-    // Normalisation de l'angle entre -PI et PI
     while (diff < -3.14159f) diff += 2.0f * 3.14159f;
     while (diff > 3.14159f)  diff -= 2.0f * 3.14159f;
 
-    // Tolérance de visée : plus on est près, plus c'est facile de toucher
     float tolerance = 0.25f / dist; 
-    if (tolerance > 0.4f) tolerance = 0.4f; // Cap max à bout portant
+    if (tolerance > 0.4f) tolerance = 0.4f;
 
-    // Si le viseur du tireur est aligné avec nous
     if (fabs(diff) < tolerance) {
-        // Vérification des murs : est-ce qu'un mur bloque la balle ?
         float step = 0.1f;
         float check_dist = 0.1f;
         while (check_dist < dist) {
             int cx = (int)(shooter.x + cosf(angle_to_target) * check_dist);
             int cy = (int)(shooter.y + sinf(angle_to_target) * check_dist);
-            
-            if (game_map[cy][cx] == 1) {
-                return false; // Un mur a arrêté la balle !
-            }
+            if (game_map[cy][cx] == 1) return false; 
             check_dist += step;
         }
-        return true; // Confirmé : On est touché !
+        return true; 
     }
     return false;
 }
@@ -78,7 +65,6 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
     
-    // --- MENU RÉSEAU ---
     AllocConsole();
     freopen("CONIN$", "r", stdin);
     freopen("CONOUT$", "w", stdout);
@@ -102,13 +88,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     }
     FreeConsole();
 
-    // --- INIT JOUEUR ET RÉSEAU ---
     init_player(&p1, mon_id, 2.0f, 2.0f);
     if (!init_networking()) return 0;
     int mon_socket = setup_udp_socket(choix == 1);
     if (mon_socket == -1) { clean_networking(); return 0; }
 
-    // --- FENÊTRE ---
     const char CLASS_NAME[] = "CSGO_GDI_Class";
     WNDCLASS wc = {0};
     wc.lpfnWndProc   = WindowProc;
@@ -122,7 +106,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     ShowWindow(hwnd, nCmdShow);
 
     MSG msg = {0};
-    static DWORD last_shot_time = 0; // Pour gérer la cadence de tir
+    static DWORD last_shot_time = 0; 
+
+    // --- VARIABLES POUR SAUVEGARDER LE CLIENT ---
+    struct sockaddr_in client_addr;
+    bool client_connected = false;
 
     while (running) {
         while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
@@ -130,18 +118,14 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
             DispatchMessage(&msg);
         }
 
-        // --- SI LE JOUEUR EST MORT ---
         if (!p1.is_alive) {
-            // Appuyer sur R pour revivre
             if (GetAsyncKeyState('R') & 0x8000) {
-                init_player(&p1, p1.id, 2.0f, 2.0f); // Respawn au début
+                init_player(&p1, p1.id, 2.0f, 2.0f);
             }
         }
 
-        // --- CONTRÔLES (UNIQUEMENT SI VIVANT) ---
         bool shooting_now = false;
         if (p1.is_alive) {
-            // Souris
             if (window_focused) {
                 POINT center_pt = { SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 };
                 ClientToScreen(hwnd, &center_pt); 
@@ -152,7 +136,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                 SetCursorPos(center_pt.x, center_pt.y);
             }
 
-            // Déplacements ZQSD
             float speed = 0.05f;
             if (GetAsyncKeyState('Z') & 0x8000) {
                 float n_x = p1.x + cosf(p1.angle) * speed; float n_y = p1.y + sinf(p1.angle) * speed;
@@ -171,7 +154,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                 if (game_map[(int)p1.y][(int)n_x] == 0) p1.x = n_x; if (game_map[(int)n_y][(int)p1.x] == 0) p1.y = n_y;
             }
 
-            // Tir (Clic Gauche) avec cooldown de 250ms
             if (GetAsyncKeyState(VK_LBUTTON) & 0x8000) {
                 if (GetTickCount() - last_shot_time > 250) {
                     shooting_now = true;
@@ -182,28 +164,27 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
         if (GetAsyncKeyState(VK_ESCAPE) & 0x8000) running = false;
 
-        // --- ENVOI DES INFOS ---
-        PlayerPacket mon_paquet = { p1.id, p1.x, p1.y, p1.angle, p1.hp, shooting_now };
-        if (choix == 2) {
-            send_data(mon_socket, mon_paquet, ip_serveur);
-        }
-
         // --- RÉCEPTION ET DÉTECTION DE HIT ---
         PlayerPacket paquet_recu;
         struct sockaddr_in adresse_provenance;
         while (receive_data(mon_socket, &paquet_recu, &adresse_provenance)) {
+            
+            // LA MAGIE EST ICI : Le serveur mémorise qui vient de lui parler !
+            if (choix == 1) {
+                client_addr = adresse_provenance;
+                client_connected = true;
+            }
+
             if (paquet_recu.id != p1.id && paquet_recu.id >= 1 && paquet_recu.id <= 4) {
-                // Mise à jour de l'ennemi pour l'affichage
                 Packets_players[paquet_recu.id].x = paquet_recu.x;
                 Packets_players[paquet_recu.id].y = paquet_recu.y;
                 Packets_players[paquet_recu.id].angle = paquet_recu.angle;
                 Packets_players[paquet_recu.id].hp = paquet_recu.hp;
                 Packets_players[paquet_recu.id].is_alive = (paquet_recu.hp > 0);
 
-                // AVONS-NOUS ÉTÉ TOUCHÉS PAR CET ENNEMI ?
                 if (paquet_recu.is_shooting && p1.is_alive) {
                     if (check_if_hit(paquet_recu, p1)) {
-                        p1.hp -= 25; // Chaque balle inflige 25 dégâts (mort en 4 coups)
+                        p1.hp -= 25; 
                         if (p1.hp <= 0) {
                             p1.hp = 0;
                             p1.is_alive = false;
@@ -213,7 +194,17 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
             }
         }
 
-        // --- GRAPHISMES (DOUBLE BUFFERING) ---
+        // --- ENVOI DES INFOS ---
+        PlayerPacket mon_paquet = { p1.id, p1.x, p1.y, p1.angle, p1.hp, shooting_now };
+        if (choix == 2) {
+            // Le Client envoie au Serveur
+            send_data(mon_socket, mon_paquet, ip_serveur);
+        } else if (choix == 1 && client_connected) {
+            // Le Serveur renvoie ses infos à l'adresse du Client qu'il a mémorisée !
+            sendto(mon_socket, (char*)&mon_paquet, sizeof(PlayerPacket), 0, (struct sockaddr*)&client_addr, sizeof(client_addr));
+        }
+
+        // --- GRAPHISMES ---
         HDC hdc = GetDC(hwnd);
         HDC memDC = CreateCompatibleDC(hdc);
         HBITMAP memBitmap = CreateCompatibleBitmap(hdc, SCREEN_WIDTH, SCREEN_HEIGHT);
@@ -221,7 +212,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
         draw_3d_view(hwnd, memDC, p1);
 
-        // Petit écran rouge d'alerte si on est mort
         if (!p1.is_alive) {
             SetTextColor(memDC, RGB(255, 0, 0));
             SetBkMode(memDC, TRANSPARENT);

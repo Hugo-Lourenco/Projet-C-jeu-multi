@@ -1,6 +1,7 @@
 #ifndef RENDERER_H
 #define RENDERER_H
 
+#include <stdbool.h>
 #include <windows.h>
 #include "player.h"
 
@@ -8,11 +9,21 @@
 #define SCREEN_HEIGHT 600
 #define FOV 1.04719755f // 60 degrés en radians
 
-// Initialisation des textures (À appeler une seule fois)
-void init_textures();
-void init_weapon_asset();
-void cleanup_weapon_asset();
+#ifdef __cplusplus
+extern "C"
+{
+#endif
 
-void draw_3d_view(HWND hwnd, HDC hdc, Player p);
+    // Initialisation des textures (À appeler une seule fois)
+    void init_textures();
+    bool init_weapon_asset();
+    void cleanup_weapon_asset();
+    void draw_weapon_asset(HDC hdc, int x, int y, int width, int height, int frame, int recoil);
+
+    void draw_3d_view(HWND hwnd, HDC hdc, Player p);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

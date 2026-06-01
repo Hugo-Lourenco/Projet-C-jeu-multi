@@ -11,7 +11,7 @@
 #include "network.h"
 
 bool running = true;
-Player p1;
+Player p1;d
 bool window_focused = true;
 Player Packets_players[5];
 

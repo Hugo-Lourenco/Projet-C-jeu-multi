@@ -26,7 +26,7 @@ int setup_udp_socket(bool is_server) {
     if (is_server) {
         struct sockaddr_in server;
         server.sin_family = AF_INET;
-        server.sin_addr.s_addr = INADDR_ANY; // Écoute toutes les cartes réseau (Ethernet)
+        server.sin_addr.s_addr = INADDR_ANY;
         server.sin_port = htons(PORT);
 
         if (bind(sock, (struct sockaddr*)&server, sizeof(server)) == SOCKET_ERROR) {
@@ -50,11 +50,11 @@ void send_data(int sock, PlayerPacket packet, const char* target_ip) {
 // Recevoir les données d'un autre joueur (Non-bloquant)
 bool receive_data(int sock, PlayerPacket* packet, struct sockaddr_in* from_addr) {
     int from_len = sizeof(struct sockaddr_in);
-    int res = recvfrom(sock, (char*)packet, sizeof(PlayerPacket), 0, (struct sockaddr*)from_addr, &from_len);    
+    int res = recvfrom(sock, (char*)packet, sizeof(PlayerPacket), 0, (struct sockaddr*)from_addr, &from_len);
     if (res > 0) {
-        return true; // Données reçues avec succès !
+        return true;
     }
-    return false; // Pas de données disponibles à cet instant
+    return false;
 }
 
 void clean_networking() {

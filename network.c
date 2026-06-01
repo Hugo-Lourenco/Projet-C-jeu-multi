@@ -1,5 +1,6 @@
 #include "network.h"
 #include <stdio.h>
+#include <string.h>
 
 // Initialise la bibliothèque réseau de Windows (Winsock)
 bool init_networking() {
@@ -24,6 +25,9 @@ int setup_udp_socket(bool is_server) {
     ioctlsocket(sock, FIONBIO, &mode);
 
     if (is_server) {
+        int reuse = 1;
+        setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (char*)&reuse, sizeof(reuse));
+
         struct sockaddr_in server;
         server.sin_family = AF_INET;
         server.sin_addr.s_addr = INADDR_ANY;
@@ -35,6 +39,61 @@ int setup_udp_socket(bool is_server) {
         }
     }
     return sock;
+}
+
+// Active le broadcast sur le socket
+void enable_broadcast(int sock) {
+    int opt = 1;
+    setsockopt(sock, SOL_SOCKET, SO_BROADCAST, (char*)&opt, sizeof(opt));
+}
+
+// Client : envoie un broadcast et collecte les réponses pendant 2 secondes
+// Retourne le nombre de serveurs trouvés
+int discover_servers(int sock, char found_ips[][64], int max_servers) {
+    enable_broadcast(sock);
+
+    DiscoveryPacket req;
+    req.packet_type = PACKET_TYPE_DISCOVERY_REQ;
+    req.players_connected = 0;
+    memset(req.server_ip, 0, sizeof(req.server_ip));
+
+    struct sockaddr_in bcast;
+    bcast.sin_family = AF_INET;
+    bcast.sin_port = htons(PORT);
+    bcast.sin_addr.s_addr = inet_addr("255.255.255.255");
+
+    sendto(sock, (char*)&req, sizeof(DiscoveryPacket), 0,
+           (struct sockaddr*)&bcast, sizeof(bcast));
+
+    int count = 0;
+    DWORD start = GetTickCount();
+
+    while (GetTickCount() - start < 2000 && count < max_servers) {
+        DiscoveryPacket resp;
+        struct sockaddr_in from;
+        int from_len = sizeof(from);
+
+        int res = recvfrom(sock, (char*)&resp, sizeof(DiscoveryPacket), 0,
+                           (struct sockaddr*)&from, &from_len);
+
+        if (res > 0 && resp.packet_type == PACKET_TYPE_DISCOVERY_RESP) {
+            // Évite les doublons
+            bool already = false;
+            for (int i = 0; i < count; i++) {
+                if (strcmp(found_ips[i], resp.server_ip) == 0) {
+                    already = true;
+                    break;
+                }
+            }
+            if (!already) {
+                strncpy(found_ips[count], resp.server_ip, 63);
+                found_ips[count][63] = '\0';
+                count++;
+            }
+        }
+        Sleep(30);
+    }
+    return count;
 }
 
 // Envoyer ses données

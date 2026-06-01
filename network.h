@@ -5,7 +5,11 @@
 #include <stdbool.h>
 #include "player.h"
 
-#define PORT 8888 // Le port libre de notre choix pour le TP
+#define PORT 8888
+
+// Types de paquets
+#define PACKET_TYPE_NORMAL    0
+#define PACKET_TYPE_ID_ASSIGN 1
 
 // La structure des données qu'on va envoyer sur le réseau à chaque frame
 typedef struct {
@@ -15,6 +19,7 @@ typedef struct {
     float angle;
     int hp;
     bool is_shooting;
+    int packet_type; // NOUVEAU : distingue les paquets normaux des demandes d'ID
 } PlayerPacket;
 
 // Fonctions globales

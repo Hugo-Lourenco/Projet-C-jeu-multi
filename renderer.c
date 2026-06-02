@@ -428,3 +428,84 @@ void draw_3d_view(HWND hwnd, HDC hdc, Player p)
     SetBkMode(hdc, TRANSPARENT);
     TextOut(hdc, bar_x + max_width + 15, bar_y + 2, hp_text, strlen(hp_text));
 }
+
+void draw_tutorial(HDC hdc, DWORD tutorial_time)
+{
+    DWORD current_time = GetTickCount();
+    DWORD elapsed = current_time - tutorial_time;
+
+    // Afficher le tutoriel pendant 10 secondes seulement
+    if (elapsed > 10000)
+        return;
+
+    // Paramètres du tutoriel
+    int tutorial_x = SCREEN_WIDTH - 260;
+    int tutorial_y = 15;
+    int tutorial_width = 245;
+    int tutorial_height = 165;
+
+    // Couleur de fond avec alpha (semi-transparent)
+    HBRUSH tutorial_bg = CreateSolidBrush(RGB(20, 20, 40));
+    RECT tutorial_rect = {tutorial_x, tutorial_y, tutorial_x + tutorial_width, tutorial_y + tutorial_height};
+    FillRect(hdc, &tutorial_rect, tutorial_bg);
+    DeleteObject(tutorial_bg);
+
+    // Bordure
+    HPEN tutorial_border = CreatePen(PS_SOLID, 2, RGB(100, 150, 255));
+    HPEN old_pen = (HPEN)SelectObject(hdc, tutorial_border);
+
+    // Dessiner le rectangle
+    MoveToEx(hdc, tutorial_x, tutorial_y, NULL);
+    LineTo(hdc, tutorial_x + tutorial_width, tutorial_y);
+    LineTo(hdc, tutorial_x + tutorial_width, tutorial_y + tutorial_height);
+    LineTo(hdc, tutorial_x, tutorial_y + tutorial_height);
+    LineTo(hdc, tutorial_x, tutorial_y);
+
+    SelectObject(hdc, old_pen);
+    DeleteObject(tutorial_border);
+
+    // Texte du tutoriel
+    SetTextColor(hdc, RGB(100, 150, 255));
+    SetBkMode(hdc, TRANSPARENT);
+
+    HFONT font = CreateFont(12, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH, "Arial");
+    HFONT old_font = (HFONT)SelectObject(hdc, font);
+
+    // Titre
+    TextOut(hdc, tutorial_x + 10, tutorial_y + 8, "-- CONTROLES --", 15);
+
+    // Touches
+    int line_y = tutorial_y + 30;
+    TextOut(hdc, tutorial_x + 10, line_y, "Z/Haut : Avancer", 16);
+    line_y += 16;
+
+    TextOut(hdc, tutorial_x + 10, line_y, "S/Bas : Reculer", 15);
+    line_y += 16;
+
+    TextOut(hdc, tutorial_x + 10, line_y, "Q/Gauche : Gauche", 17);
+    line_y += 16;
+
+    TextOut(hdc, tutorial_x + 10, line_y, "D/Droite : Droite", 17);
+    line_y += 16;
+
+    TextOut(hdc, tutorial_x + 10, line_y, "SOURIS : Regarder", 16);
+    line_y += 16;
+
+    TextOut(hdc, tutorial_x + 10, line_y, "CLIC : Tirer", 12);
+
+    SelectObject(hdc, old_font);
+    DeleteObject(font);
+
+    // Afficher "Cette fenetre disparait dans X sec"
+    SetTextColor(hdc, RGB(150, 150, 150));
+    HFONT small_font = CreateFont(10, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH, "Arial");
+    HFONT old_small_font = (HFONT)SelectObject(hdc, small_font);
+
+    int remaining_secs = 10 - (elapsed / 1000);
+    char timer_text[32];
+    sprintf(timer_text, "Disparait dans %d sec", remaining_secs);
+    TextOut(hdc, tutorial_x + 10, tutorial_y + tutorial_height - 18, timer_text, strlen(timer_text));
+
+    SelectObject(hdc, old_small_font);
+    DeleteObject(small_font);
+}

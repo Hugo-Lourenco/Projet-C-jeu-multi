@@ -428,3 +428,49 @@ void draw_3d_view(HWND hwnd, HDC hdc, Player p)
     SetBkMode(hdc, TRANSPARENT);
     TextOut(hdc, bar_x + max_width + 15, bar_y + 2, hp_text, strlen(hp_text));
 }
+
+void draw_tutorial(HDC hdc)
+{
+    // Fond semi-transparent du tutoriel
+    HBRUSH bgBrush = CreateSolidBrush(RGB(0, 0, 0));
+    RECT tutorialBg = {10, 10, 250, 200};
+    FillRect(hdc, &tutorialBg, bgBrush);
+    DeleteObject(bgBrush);
+
+    // Contour du tutoriel
+    HPEN framePen = CreatePen(PS_SOLID, 2, RGB(0, 255, 0));
+    HPEN oldPen = (HPEN)SelectObject(hdc, framePen);
+    MoveToEx(hdc, 10, 10, NULL);
+    LineTo(hdc, 250, 10);
+    LineTo(hdc, 250, 200);
+    LineTo(hdc, 10, 200);
+    LineTo(hdc, 10, 10);
+    SelectObject(hdc, oldPen);
+    DeleteObject(framePen);
+
+    // Titre
+    SetTextColor(hdc, RGB(0, 255, 0));
+    SetBkMode(hdc, TRANSPARENT);
+    TextOut(hdc, 20, 15, "CONTROLES", 9);
+
+    // Contrôles
+    SetTextColor(hdc, RGB(200, 200, 200));
+    int y_pos = 40;
+    int line_height = 18;
+
+    TextOut(hdc, 20, y_pos, "Z - Avancer", 11);
+    y_pos += line_height;
+    TextOut(hdc, 20, y_pos, "S - Reculer", 11);
+    y_pos += line_height;
+    TextOut(hdc, 20, y_pos, "Q - Gauche", 10);
+    y_pos += line_height;
+    TextOut(hdc, 20, y_pos, "D - Droite", 10);
+    y_pos += line_height;
+    TextOut(hdc, 20, y_pos, "Clic - Tirer", 12);
+    y_pos += line_height;
+    TextOut(hdc, 20, y_pos, "R - Respawn", 11);
+    y_pos += line_height;
+    TextOut(hdc, 20, y_pos, "F11 - Plein ecran", 16);
+    y_pos += line_height;
+    TextOut(hdc, 20, y_pos, "ESC - Quitter", 13);
+}

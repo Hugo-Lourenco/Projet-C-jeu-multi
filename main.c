@@ -15,6 +15,8 @@ bool running = true;
 Player p1;
 bool window_focused = true;
 Player Packets_players[5];
+bool show_tutorial = true;
+DWORD tutorial_start_time = 0;
 
 // Variables pour retenir l'ancienne fenêtre avant le plein écran
 static WINDOWPLACEMENT wpPrev = {sizeof(wpPrev), 0};
@@ -284,6 +286,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     ShowWindow(hwnd, nCmdShow);
     SetForegroundWindow(hwnd);
 
+    tutorial_start_time = GetTickCount();
+
     MSG msg = {0};
     static DWORD last_shot_time = 0;
     static DWORD weapon_fire_start = 0;
@@ -342,6 +346,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
             if (window_focused && (GetAsyncKeyState('R') & 0x8000))
                 init_player(&p1, p1.id, 2.0f, 2.0f);
         }
+
+        // --- MASQUAGE DU TUTORIEL APRÈS 10 SECONDES OU AVEC UNE TOUCHE ---
+        if (show_tutorial && GetTickCount() - tutorial_start_time > 10000)
+            show_tutorial = false;
+
+        if (show_tutorial && window_focused && (GetAsyncKeyState(VK_SPACE) & 0x8000))
+            show_tutorial = false;
 
         bool shooting_now = false;
 
@@ -563,6 +574,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
         draw_3d_view(hwnd, memDC, p1);
         draw_weapon_asset(memDC, SCREEN_WIDTH - 360, base_y, 360, 320, weapon_fire_frame, recoil);
+
+        if (show_tutorial)
+            draw_tutorial(memDC);
 
         if (!p1.is_alive)
         {

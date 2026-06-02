@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <math.h>
+#include <string.h>
 
 #include "player.h"
 #include "map.h"
@@ -56,6 +57,20 @@ bool check_if_hit(PlayerPacket shooter, Player target)
         return true;
     }
     return false;
+}
+
+// Récupère l'IP locale de la machine (première interface non-loopback)
+static void get_local_ip(char* out_ip, int buf_size)
+{
+    strncpy(out_ip, "127.0.0.1", buf_size);
+    char hostname[256];
+    if (gethostname(hostname, sizeof(hostname)) == 0) {
+        struct hostent* he = gethostbyname(hostname);
+        if (he && he->h_addr_list[0]) {
+            strncpy(out_ip, inet_ntoa(*(struct in_addr*)he->h_addr_list[0]), buf_size - 1);
+            out_ip[buf_size - 1] = '\0';
+        }
+    }
 }
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
@@ -113,64 +128,82 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     int choix = 0;
     scanf("%d", &choix);
 
-    // -----------------------------------------------------------------
-    // ATTRIBUTION AUTOMATIQUE D'ID
-    // Le serveur prend toujours l'ID 1.
-    // Les clients reçoivent leur ID depuis le serveur (plus de saisie).
-    // -----------------------------------------------------------------
     int mon_id = 0;
-
     char ip_serveur[64] = "127.0.0.1";
-    if (choix == 2)
-    {
-        SetConsoleTextAttribute(hConsole, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE | FOREGROUND_INTENSITY);
-        printf("  > Entrez l'IP du serveur : ");
-        SetConsoleTextAttribute(hConsole, FOREGROUND_GREEN | FOREGROUND_INTENSITY);
-        scanf("%s", ip_serveur);
-    }
-    else
+
+    // Initialisation réseau avant la découverte
+    if (!init_networking()) { FreeConsole(); return 0; }
+    int mon_socket = setup_udp_socket(choix == 1);
+    if (mon_socket == -1) { clean_networking(); FreeConsole(); return 0; }
+
+    if (choix == 1)
     {
         // Le serveur est toujours le joueur 1
         mon_id = 1;
+        char local_ip[64];
+        get_local_ip(local_ip, sizeof(local_ip));
+        SetConsoleTextAttribute(hConsole, FOREGROUND_GREEN | FOREGROUND_INTENSITY);
+        printf("\n  Serveur demarre sur %s:%d\n", local_ip, PORT);
     }
+    else
+    {
+        // -----------------------------------------------------------------
+        // CLIENT : Découverte LAN des serveurs disponibles
+        // -----------------------------------------------------------------
+        SetConsoleTextAttribute(hConsole, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE | FOREGROUND_INTENSITY);
+        printf("\n  Recherche de serveurs sur le reseau local");
 
-    SetConsoleTextAttribute(hConsole, FOREGROUND_RED | FOREGROUND_INTENSITY);
-    printf("\n  Initialisation du moteur graphique et du reseau ");
-    for (int i = 0; i < 4; i++)
-    {
-        Sleep(350);
-        printf(".");
-    }
-    printf("\n");
+        char found_ips[8][64];
+        int nb = discover_servers(mon_socket, found_ips, 8);
 
-    init_textures();
-    if (!init_weapon_asset())
-    {
-        printf("ERREUR : impossible de charger asset m4 neutre.png\n");
-    }
+        if (nb == 0)
+        {
+            SetConsoleTextAttribute(hConsole, FOREGROUND_RED | FOREGROUND_INTENSITY);
+            printf("\n  Aucun serveur trouve automatiquement.\n");
+            SetConsoleTextAttribute(hConsole, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE | FOREGROUND_INTENSITY);
+            printf("  > Entrez l'IP du serveur manuellement : ");
+            SetConsoleTextAttribute(hConsole, FOREGROUND_GREEN | FOREGROUND_INTENSITY);
+            scanf("%s", ip_serveur);
+        }
+        else
+        {
+            SetConsoleTextAttribute(hConsole, FOREGROUND_GREEN | FOREGROUND_INTENSITY);
+            printf("\n\n  +------------------------------------------+\n");
+            printf("  |        SERVEURS DISPONIBLES              |\n");
+            printf("  +------------------------------------------+\n");
+            for (int i = 0; i < nb; i++)
+                printf("  |  [%d]  %-36s|\n", i + 1, found_ips[i]);
+            printf("  |  [0]  Entrer une IP manuellement        |\n");
+            printf("  +------------------------------------------+\n");
 
-    if (!init_networking())
-    {
-        FreeConsole();
-        return 0;
-    }
-    int mon_socket = setup_udp_socket(choix == 1);
-    if (mon_socket == -1)
-    {
-        clean_networking();
-        FreeConsole();
-        return 0;
-    }
+            SetConsoleTextAttribute(hConsole, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE | FOREGROUND_INTENSITY);
+            printf("\n  > Votre choix : ");
+            SetConsoleTextAttribute(hConsole, FOREGROUND_GREEN | FOREGROUND_INTENSITY);
 
-    // -----------------------------------------------------------------
-    // CLIENT : demande d'ID automatique au serveur
-    // -----------------------------------------------------------------
-    if (choix == 2)
-    {
+            int srv_choix;
+            scanf("%d", &srv_choix);
+
+            if (srv_choix >= 1 && srv_choix <= nb)
+            {
+                strncpy(ip_serveur, found_ips[srv_choix - 1], sizeof(ip_serveur) - 1);
+                ip_serveur[sizeof(ip_serveur) - 1] = '\0';
+                printf("  Connexion a %s...\n", ip_serveur);
+            }
+            else
+            {
+                SetConsoleTextAttribute(hConsole, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE | FOREGROUND_INTENSITY);
+                printf("  > IP manuelle : ");
+                SetConsoleTextAttribute(hConsole, FOREGROUND_GREEN | FOREGROUND_INTENSITY);
+                scanf("%s", ip_serveur);
+            }
+        }
+
+        // -----------------------------------------------------------------
+        // CLIENT : demande d'ID automatique au serveur
+        // -----------------------------------------------------------------
         SetConsoleTextAttribute(hConsole, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE | FOREGROUND_INTENSITY);
         printf("  Connexion au serveur %s, attribution de l'ID", ip_serveur);
 
-        // Envoi de la demande d'ID (paquet spécial avec id=0)
         PlayerPacket demande = {0, 0.0f, 0.0f, 0.0f, 0, false, PACKET_TYPE_ID_ASSIGN};
         send_data(mon_socket, demande, ip_serveur);
 
@@ -211,6 +244,21 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         Sleep(800);
     }
 
+    SetConsoleTextAttribute(hConsole, FOREGROUND_RED | FOREGROUND_INTENSITY);
+    printf("\n  Initialisation du moteur graphique et du reseau ");
+    for (int i = 0; i < 4; i++)
+    {
+        Sleep(350);
+        printf(".");
+    }
+    printf("\n");
+
+    init_textures();
+    if (!init_weapon_asset())
+    {
+        printf("ERREUR : impossible de charger asset m4 neutre.png\n");
+    }
+
     FreeConsole();
 
     init_player(&p1, mon_id, 2.0f, 2.0f);
@@ -242,6 +290,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     static int weapon_fire_frame = 0;
     struct sockaddr_in clients_addr[5];
     bool is_client_connected[5] = {false, false, false, false, false};
+
+    // IP locale pour les réponses discovery (serveur uniquement)
+    char my_local_ip[64] = "127.0.0.1";
+    if (choix == 1)
+        get_local_ip(my_local_ip, sizeof(my_local_ip));
 
     while (running)
     {
@@ -310,39 +363,31 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
             {
                 float n_x = p1.x + cosf(p1.angle) * speed;
                 float n_y = p1.y + sinf(p1.angle) * speed;
-                if (game_map[(int)p1.y][(int)n_x] == 0)
-                    p1.x = n_x;
-                if (game_map[(int)n_y][(int)p1.x] == 0)
-                    p1.y = n_y;
+                if (game_map[(int)p1.y][(int)n_x] == 0) p1.x = n_x;
+                if (game_map[(int)n_y][(int)p1.x] == 0) p1.y = n_y;
             }
             if (GetAsyncKeyState('S') & 0x8000)
             {
                 float n_x = p1.x - cosf(p1.angle) * speed;
                 float n_y = p1.y - sinf(p1.angle) * speed;
-                if (game_map[(int)p1.y][(int)n_x] == 0)
-                    p1.x = n_x;
-                if (game_map[(int)n_y][(int)p1.x] == 0)
-                    p1.y = n_y;
+                if (game_map[(int)p1.y][(int)n_x] == 0) p1.x = n_x;
+                if (game_map[(int)n_y][(int)p1.x] == 0) p1.y = n_y;
             }
             if (GetAsyncKeyState('Q') & 0x8000)
             {
                 float s_a = p1.angle - 1.5708f;
                 float n_x = p1.x + cosf(s_a) * speed;
                 float n_y = p1.y + sinf(s_a) * speed;
-                if (game_map[(int)p1.y][(int)n_x] == 0)
-                    p1.x = n_x;
-                if (game_map[(int)n_y][(int)p1.x] == 0)
-                    p1.y = n_y;
+                if (game_map[(int)p1.y][(int)n_x] == 0) p1.x = n_x;
+                if (game_map[(int)n_y][(int)p1.x] == 0) p1.y = n_y;
             }
             if (GetAsyncKeyState('D') & 0x8000)
             {
                 float s_a = p1.angle + 1.5708f;
                 float n_x = p1.x + cosf(s_a) * speed;
                 float n_y = p1.y + sinf(s_a) * speed;
-                if (game_map[(int)p1.y][(int)n_x] == 0)
-                    p1.x = n_x;
-                if (game_map[(int)n_y][(int)p1.x] == 0)
-                    p1.y = n_y;
+                if (game_map[(int)p1.y][(int)n_x] == 0) p1.x = n_x;
+                if (game_map[(int)n_y][(int)p1.x] == 0) p1.y = n_y;
             }
 
             if (GetAsyncKeyState(VK_LBUTTON) & 0x8000)
@@ -361,10 +406,45 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
             running = false;
 
         // --- RÉCEPTION RÉSEAU ---
-        PlayerPacket paquet_recu;
+        // Buffer générique pour distinguer PlayerPacket et DiscoveryPacket
+        char raw_buf[256];
         struct sockaddr_in adresse_provenance;
-        while (receive_data(mon_socket, &paquet_recu, &adresse_provenance))
+        int from_len = sizeof(adresse_provenance);
+        int res;
+
+        while ((res = recvfrom(mon_socket, raw_buf, sizeof(raw_buf), 0,
+                               (struct sockaddr*)&adresse_provenance, &from_len)) > 0)
         {
+            int pkt_type = *((int*)raw_buf);
+
+            // --- SERVEUR : répondre aux demandes de découverte LAN ---
+            if (choix == 1 && pkt_type == PACKET_TYPE_DISCOVERY_REQ)
+            {
+                int nb_joueurs = 1;
+                for (int i = 2; i <= 4; i++)
+                    if (is_client_connected[i]) nb_joueurs++;
+
+                DiscoveryPacket resp;
+                resp.packet_type = PACKET_TYPE_DISCOVERY_RESP;
+                resp.players_connected = nb_joueurs;
+                strncpy(resp.server_ip, my_local_ip, sizeof(resp.server_ip) - 1);
+                resp.server_ip[sizeof(resp.server_ip) - 1] = '\0';
+
+                sendto(mon_socket, (char*)&resp, sizeof(DiscoveryPacket), 0,
+                       (struct sockaddr*)&adresse_provenance, sizeof(adresse_provenance));
+
+                from_len = sizeof(adresse_provenance);
+                continue;
+            }
+
+            // Taille minimale pour un PlayerPacket
+            if (res < (int)sizeof(PlayerPacket))
+            {
+                from_len = sizeof(adresse_provenance);
+                continue;
+            }
+
+            PlayerPacket paquet_recu = *((PlayerPacket*)raw_buf);
 
             // --- SERVEUR : attribution automatique d'ID à un nouveau client ---
             if (choix == 1 && paquet_recu.packet_type == PACKET_TYPE_ID_ASSIGN && paquet_recu.id == 0)
@@ -383,12 +463,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                     is_client_connected[free_id] = true;
                     clients_addr[free_id] = adresse_provenance;
 
-                    // Répond au client avec son ID attribué
                     PlayerPacket rep = {free_id, 2.0f, 2.0f, 0.0f, 100, false, PACKET_TYPE_ID_ASSIGN};
-                    sendto(mon_socket, (char *)&rep, sizeof(PlayerPacket), 0,
-                           (struct sockaddr *)&adresse_provenance, sizeof(adresse_provenance));
+                    sendto(mon_socket, (char*)&rep, sizeof(PlayerPacket), 0,
+                           (struct sockaddr*)&adresse_provenance, sizeof(adresse_provenance));
                 }
-                continue; // Ce paquet est consommé, on passe au suivant
+                from_len = sizeof(adresse_provenance);
+                continue;
             }
 
             // --- Réception normale (paquets de jeu) ---
@@ -399,10 +479,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
             }
             if (paquet_recu.id != p1.id && paquet_recu.id >= 1 && paquet_recu.id <= 4)
             {
-                Packets_players[paquet_recu.id].x = paquet_recu.x;
-                Packets_players[paquet_recu.id].y = paquet_recu.y;
-                Packets_players[paquet_recu.id].angle = paquet_recu.angle;
-                Packets_players[paquet_recu.id].hp = paquet_recu.hp;
+                Packets_players[paquet_recu.id].x        = paquet_recu.x;
+                Packets_players[paquet_recu.id].y        = paquet_recu.y;
+                Packets_players[paquet_recu.id].angle    = paquet_recu.angle;
+                Packets_players[paquet_recu.id].hp       = paquet_recu.hp;
                 Packets_players[paquet_recu.id].is_alive = (paquet_recu.hp > 0);
                 Packets_players[paquet_recu.id].is_shooting = paquet_recu.is_shooting;
 
@@ -419,6 +499,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                     }
                 }
             }
+
+            from_len = sizeof(adresse_provenance);
         }
 
         // --- ENVOI RÉSEAU ---
@@ -433,8 +515,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
             {
                 if (is_client_connected[i])
                 {
-                    sendto(mon_socket, (char *)&mon_paquet, sizeof(PlayerPacket), 0,
-                           (struct sockaddr *)&clients_addr[i], sizeof(clients_addr[i]));
+                    sendto(mon_socket, (char*)&mon_paquet, sizeof(PlayerPacket), 0,
+                           (struct sockaddr*)&clients_addr[i], sizeof(clients_addr[i]));
                     // Relay des autres clients
                     for (int j = 2; j <= 4; j++)
                     {
@@ -448,8 +530,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                                 Packets_players[j].hp,
                                 Packets_players[j].is_shooting,
                                 PACKET_TYPE_NORMAL};
-                            sendto(mon_socket, (char *)&relay_pkt, sizeof(PlayerPacket), 0,
-                                   (struct sockaddr *)&clients_addr[i], sizeof(clients_addr[i]));
+                            sendto(mon_socket, (char*)&relay_pkt, sizeof(PlayerPacket), 0,
+                                   (struct sockaddr*)&clients_addr[i], sizeof(clients_addr[i]));
                         }
                     }
                 }
@@ -461,17 +543,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
             DWORD now = GetTickCount();
             DWORD elapsed = now - weapon_fire_start;
             if (elapsed > 180)
-            {
                 weapon_fire_frame = 0;
-            }
             else if (elapsed > 90)
-            {
                 weapon_fire_frame = 2;
-            }
             else
-            {
                 weapon_fire_frame = 1;
-            }
         }
 
         // --- GRAPHISMES ---

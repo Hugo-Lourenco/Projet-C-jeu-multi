@@ -1,7 +1,6 @@
 #include "network.h"
 #include <stdio.h>
 #include <string.h>
-#include <iphlpapi.h>
 
 // Initialise la bibliothèque réseau de Windows (Winsock)
 bool init_networking() {
@@ -21,6 +20,7 @@ int setup_udp_socket(bool is_server) {
         return -1;
     }
 
+    // Mode non-bloquant : pour que le jeu n'attende pas indéfiniment un message réseau
     unsigned long mode = 1;
     ioctlsocket(sock, FIONBIO, &mode);
 
@@ -47,50 +47,8 @@ void enable_broadcast(int sock) {
     setsockopt(sock, SOL_SOCKET, SO_BROADCAST, (char*)&opt, sizeof(opt));
 }
 
-// Calcule les adresses de broadcast de toutes les interfaces réseau actives
-// Retourne le nombre d'adresses trouvées
-static int get_broadcast_addresses(unsigned long* bcast_addrs, int max_addrs) {
-    int count = 0;
-
-    // Toujours ajouter 255.255.255.255 en fallback
-    bcast_addrs[count++] = inet_addr("255.255.255.255");
-
-    // Récupérer les infos des adaptateurs réseau
-    IP_ADAPTER_INFO adapterInfo[16];
-    DWORD bufLen = sizeof(adapterInfo);
-
-    if (GetAdaptersInfo(adapterInfo, &bufLen) == NO_ERROR) {
-        IP_ADAPTER_INFO* adapter = adapterInfo;
-        while (adapter && count < max_addrs) {
-            // Récupérer IP et masque
-            unsigned long ip   = inet_addr(adapter->IpAddressList.IpAddress.String);
-            unsigned long mask = inet_addr(adapter->IpAddressList.IpMask.String);
-
-            // Ignorer les interfaces invalides ou loopback
-            if (ip != 0 && ip != inet_addr("127.0.0.1") && mask != 0) {
-                // Broadcast = (IP & masque) | (~masque)
-                unsigned long bcast = (ip & mask) | (~mask);
-
-                // Éviter les doublons
-                bool already = false;
-                for (int i = 0; i < count; i++) {
-                    if (bcast_addrs[i] == bcast) { already = true; break; }
-                }
-                if (!already) {
-                    printf("  Interface detectee : %s / %s -> broadcast %s\n",
-                           adapter->IpAddressList.IpAddress.String,
-                           adapter->IpAddressList.IpMask.String,
-                           inet_ntoa(*(struct in_addr*)&bcast));
-                    bcast_addrs[count++] = bcast;
-                }
-            }
-            adapter = adapter->Next;
-        }
-    }
-    return count;
-}
-
-// Client : envoie un broadcast sur toutes les interfaces et collecte les réponses
+// Client : envoie un broadcast et collecte les réponses pendant 2 secondes
+// Retourne le nombre de serveurs trouvés
 int discover_servers(int sock, char found_ips[][64], int max_servers) {
     enable_broadcast(sock);
 
@@ -99,18 +57,13 @@ int discover_servers(int sock, char found_ips[][64], int max_servers) {
     req.players_connected = 0;
     memset(req.server_ip, 0, sizeof(req.server_ip));
 
-    // Envoyer le broadcast sur toutes les interfaces détectées
-    unsigned long bcast_addrs[8];
-    int nb_ifaces = get_broadcast_addresses(bcast_addrs, 8);
+    struct sockaddr_in bcast;
+    bcast.sin_family = AF_INET;
+    bcast.sin_port = htons(PORT);
+    bcast.sin_addr.s_addr = inet_addr("255.255.255.255");
 
-    for (int b = 0; b < nb_ifaces; b++) {
-        struct sockaddr_in bcast;
-        bcast.sin_family = AF_INET;
-        bcast.sin_port = htons(PORT);
-        bcast.sin_addr.s_addr = bcast_addrs[b];
-        sendto(sock, (char*)&req, sizeof(DiscoveryPacket), 0,
-               (struct sockaddr*)&bcast, sizeof(bcast));
-    }
+    sendto(sock, (char*)&req, sizeof(DiscoveryPacket), 0,
+           (struct sockaddr*)&bcast, sizeof(bcast));
 
     int count = 0;
     DWORD start = GetTickCount();
@@ -124,6 +77,7 @@ int discover_servers(int sock, char found_ips[][64], int max_servers) {
                            (struct sockaddr*)&from, &from_len);
 
         if (res > 0 && resp.packet_type == PACKET_TYPE_DISCOVERY_RESP) {
+            // Évite les doublons
             bool already = false;
             for (int i = 0; i < count; i++) {
                 if (strcmp(found_ips[i], resp.server_ip) == 0) {

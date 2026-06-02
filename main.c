@@ -15,8 +15,6 @@ bool running = true;
 Player p1;
 bool window_focused = true;
 Player Packets_players[5];
-bool show_tutorial = true;
-DWORD tutorial_start_time = 0;
 
 // Variables pour retenir l'ancienne fenêtre avant le plein écran
 static WINDOWPLACEMENT wpPrev = {sizeof(wpPrev), 0};
@@ -62,16 +60,14 @@ bool check_if_hit(PlayerPacket shooter, Player target)
 }
 
 // Récupère l'IP locale de la machine (première interface non-loopback)
-static void get_local_ip(char *out_ip, int buf_size)
+static void get_local_ip(char* out_ip, int buf_size)
 {
     strncpy(out_ip, "127.0.0.1", buf_size);
     char hostname[256];
-    if (gethostname(hostname, sizeof(hostname)) == 0)
-    {
-        struct hostent *he = gethostbyname(hostname);
-        if (he && he->h_addr_list[0])
-        {
-            strncpy(out_ip, inet_ntoa(*(struct in_addr *)he->h_addr_list[0]), buf_size - 1);
+    if (gethostname(hostname, sizeof(hostname)) == 0) {
+        struct hostent* he = gethostbyname(hostname);
+        if (he && he->h_addr_list[0]) {
+            strncpy(out_ip, inet_ntoa(*(struct in_addr*)he->h_addr_list[0]), buf_size - 1);
             out_ip[buf_size - 1] = '\0';
         }
     }
@@ -136,18 +132,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     char ip_serveur[64] = "127.0.0.1";
 
     // Initialisation réseau avant la découverte
-    if (!init_networking())
-    {
-        FreeConsole();
-        return 0;
-    }
+    if (!init_networking()) { FreeConsole(); return 0; }
     int mon_socket = setup_udp_socket(choix == 1);
-    if (mon_socket == -1)
-    {
-        clean_networking();
-        FreeConsole();
-        return 0;
-    }
+    if (mon_socket == -1) { clean_networking(); FreeConsole(); return 0; }
 
     if (choix == 1)
     {
@@ -297,8 +284,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     ShowWindow(hwnd, nCmdShow);
     SetForegroundWindow(hwnd);
 
-    tutorial_start_time = GetTickCount();
-
     MSG msg = {0};
     static DWORD last_shot_time = 0;
     static DWORD weapon_fire_start = 0;
@@ -358,13 +343,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                 init_player(&p1, p1.id, 2.0f, 2.0f);
         }
 
-        // --- MASQUAGE DU TUTORIEL APRÈS 10 SECONDES OU AVEC UNE TOUCHE ---
-        if (show_tutorial && GetTickCount() - tutorial_start_time > 10000)
-            show_tutorial = false;
-
-        if (show_tutorial && window_focused && (GetAsyncKeyState(VK_SPACE) & 0x8000))
-            show_tutorial = false;
-
         bool shooting_now = false;
 
         if (p1.is_alive && window_focused)
@@ -385,39 +363,31 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
             {
                 float n_x = p1.x + cosf(p1.angle) * speed;
                 float n_y = p1.y + sinf(p1.angle) * speed;
-                if (game_map[(int)p1.y][(int)n_x] == 0)
-                    p1.x = n_x;
-                if (game_map[(int)n_y][(int)p1.x] == 0)
-                    p1.y = n_y;
+                if (game_map[(int)p1.y][(int)n_x] == 0) p1.x = n_x;
+                if (game_map[(int)n_y][(int)p1.x] == 0) p1.y = n_y;
             }
             if (GetAsyncKeyState('S') & 0x8000)
             {
                 float n_x = p1.x - cosf(p1.angle) * speed;
                 float n_y = p1.y - sinf(p1.angle) * speed;
-                if (game_map[(int)p1.y][(int)n_x] == 0)
-                    p1.x = n_x;
-                if (game_map[(int)n_y][(int)p1.x] == 0)
-                    p1.y = n_y;
+                if (game_map[(int)p1.y][(int)n_x] == 0) p1.x = n_x;
+                if (game_map[(int)n_y][(int)p1.x] == 0) p1.y = n_y;
             }
             if (GetAsyncKeyState('Q') & 0x8000)
             {
                 float s_a = p1.angle - 1.5708f;
                 float n_x = p1.x + cosf(s_a) * speed;
                 float n_y = p1.y + sinf(s_a) * speed;
-                if (game_map[(int)p1.y][(int)n_x] == 0)
-                    p1.x = n_x;
-                if (game_map[(int)n_y][(int)p1.x] == 0)
-                    p1.y = n_y;
+                if (game_map[(int)p1.y][(int)n_x] == 0) p1.x = n_x;
+                if (game_map[(int)n_y][(int)p1.x] == 0) p1.y = n_y;
             }
             if (GetAsyncKeyState('D') & 0x8000)
             {
                 float s_a = p1.angle + 1.5708f;
                 float n_x = p1.x + cosf(s_a) * speed;
                 float n_y = p1.y + sinf(s_a) * speed;
-                if (game_map[(int)p1.y][(int)n_x] == 0)
-                    p1.x = n_x;
-                if (game_map[(int)n_y][(int)p1.x] == 0)
-                    p1.y = n_y;
+                if (game_map[(int)p1.y][(int)n_x] == 0) p1.x = n_x;
+                if (game_map[(int)n_y][(int)p1.x] == 0) p1.y = n_y;
             }
 
             if (GetAsyncKeyState(VK_LBUTTON) & 0x8000)
@@ -443,17 +413,17 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         int res;
 
         while ((res = recvfrom(mon_socket, raw_buf, sizeof(raw_buf), 0,
-                               (struct sockaddr *)&adresse_provenance, &from_len)) > 0)
+                               (struct sockaddr*)&adresse_provenance, &from_len)) > 0)
         {
-            int pkt_type = *((int *)raw_buf);
+            PlayerPacket* potential_packet = (PlayerPacket*)raw_buf;
+            int pkt_type = potential_packet->packet_type;
 
             // --- SERVEUR : répondre aux demandes de découverte LAN ---
             if (choix == 1 && pkt_type == PACKET_TYPE_DISCOVERY_REQ)
             {
                 int nb_joueurs = 1;
                 for (int i = 2; i <= 4; i++)
-                    if (is_client_connected[i])
-                        nb_joueurs++;
+                    if (is_client_connected[i]) nb_joueurs++;
 
                 DiscoveryPacket resp;
                 resp.packet_type = PACKET_TYPE_DISCOVERY_RESP;
@@ -461,8 +431,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                 strncpy(resp.server_ip, my_local_ip, sizeof(resp.server_ip) - 1);
                 resp.server_ip[sizeof(resp.server_ip) - 1] = '\0';
 
-                sendto(mon_socket, (char *)&resp, sizeof(DiscoveryPacket), 0,
-                       (struct sockaddr *)&adresse_provenance, sizeof(adresse_provenance));
+                sendto(mon_socket, (char*)&resp, sizeof(DiscoveryPacket), 0,
+                       (struct sockaddr*)&adresse_provenance, sizeof(adresse_provenance));
 
                 from_len = sizeof(adresse_provenance);
                 continue;
@@ -475,7 +445,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                 continue;
             }
 
-            PlayerPacket paquet_recu = *((PlayerPacket *)raw_buf);
+            PlayerPacket paquet_recu = *((PlayerPacket*)raw_buf);
 
             // --- SERVEUR : attribution automatique d'ID à un nouveau client ---
             if (choix == 1 && paquet_recu.packet_type == PACKET_TYPE_ID_ASSIGN && paquet_recu.id == 0)
@@ -495,8 +465,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                     clients_addr[free_id] = adresse_provenance;
 
                     PlayerPacket rep = {free_id, 2.0f, 2.0f, 0.0f, 100, false, PACKET_TYPE_ID_ASSIGN};
-                    sendto(mon_socket, (char *)&rep, sizeof(PlayerPacket), 0,
-                           (struct sockaddr *)&adresse_provenance, sizeof(adresse_provenance));
+                    sendto(mon_socket, (char*)&rep, sizeof(PlayerPacket), 0,
+                           (struct sockaddr*)&adresse_provenance, sizeof(adresse_provenance));
                 }
                 from_len = sizeof(adresse_provenance);
                 continue;
@@ -510,10 +480,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
             }
             if (paquet_recu.id != p1.id && paquet_recu.id >= 1 && paquet_recu.id <= 4)
             {
-                Packets_players[paquet_recu.id].x = paquet_recu.x;
-                Packets_players[paquet_recu.id].y = paquet_recu.y;
-                Packets_players[paquet_recu.id].angle = paquet_recu.angle;
-                Packets_players[paquet_recu.id].hp = paquet_recu.hp;
+                Packets_players[paquet_recu.id].x        = paquet_recu.x;
+                Packets_players[paquet_recu.id].y        = paquet_recu.y;
+                Packets_players[paquet_recu.id].angle    = paquet_recu.angle;
+                Packets_players[paquet_recu.id].hp       = paquet_recu.hp;
                 Packets_players[paquet_recu.id].is_alive = (paquet_recu.hp > 0);
                 Packets_players[paquet_recu.id].is_shooting = paquet_recu.is_shooting;
 
@@ -546,8 +516,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
             {
                 if (is_client_connected[i])
                 {
-                    sendto(mon_socket, (char *)&mon_paquet, sizeof(PlayerPacket), 0,
-                           (struct sockaddr *)&clients_addr[i], sizeof(clients_addr[i]));
+                    sendto(mon_socket, (char*)&mon_paquet, sizeof(PlayerPacket), 0,
+                           (struct sockaddr*)&clients_addr[i], sizeof(clients_addr[i]));
                     // Relay des autres clients
                     for (int j = 2; j <= 4; j++)
                     {
@@ -561,8 +531,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                                 Packets_players[j].hp,
                                 Packets_players[j].is_shooting,
                                 PACKET_TYPE_NORMAL};
-                            sendto(mon_socket, (char *)&relay_pkt, sizeof(PlayerPacket), 0,
-                                   (struct sockaddr *)&clients_addr[i], sizeof(clients_addr[i]));
+                            sendto(mon_socket, (char*)&relay_pkt, sizeof(PlayerPacket), 0,
+                                   (struct sockaddr*)&clients_addr[i], sizeof(clients_addr[i]));
                         }
                     }
                 }
@@ -594,9 +564,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
         draw_3d_view(hwnd, memDC, p1);
         draw_weapon_asset(memDC, SCREEN_WIDTH - 360, base_y, 360, 320, weapon_fire_frame, recoil);
-
-        if (show_tutorial)
-            draw_tutorial(memDC);
 
         if (!p1.is_alive)
         {

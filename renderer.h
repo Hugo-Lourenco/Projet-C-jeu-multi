@@ -21,7 +21,6 @@ extern "C"
     void draw_weapon_asset(HDC hdc, int x, int y, int width, int height, int frame, int recoil);
 
     void draw_3d_view(HWND hwnd, HDC hdc, Player p);
-    void draw_tutorial(HDC hdc);
 
 #ifdef __cplusplus
 }
